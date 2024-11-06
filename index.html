@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cash Flow Mensual Botillería</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { padding: 20px; }
+        h2 { margin-bottom: 20px; }
+        .form-section { margin-bottom: 20px; }
+        .cash-flow-table th, .cash-flow-table td { text-align: center; }
+        .chart-container { width: 100%; max-width: 800px; margin-top: 20px; }
+        .summary { margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <h2>Cash Flow Mensual de la Botillería</h2>
+
+    <!-- Formulario de Entrada de Datos -->
+    <div class="form-section">
+        <h5>Registro de Movimiento</h5>
+        <div class="row">
+            <div class="col-md-3">
+                <label for="fecha">Fecha:</label>
+                <input type="date" id="fecha" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label for="monto">Monto:</label>
+                <input type="number" id="monto" class="form-control" placeholder="Monto en $">
+            </div>
+            <div class="col-md-3">
+                <label for="tipo">Tipo de Movimiento:</label>
+                <select id="tipo" class="form-control">
+                    <option value="entradaEfectivo">Entrada Efectivo</option>
+                    <option value="entradaTarjeta">Entrada Tarjeta</option>
+                    <option value="salidaProveedor">Salida Proveedor</option>
+                    <option value="salidaGasto">Salida Gasto</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button onclick="agregarMovimiento()" class="btn btn-primary mt-4">Agregar Movimiento</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Selector de Mes -->
+    <div class="form-section">
+        <h5>Ver Resumen de Cash Flow por Mes</h5>
+        <input type="month" id="mesSeleccionado" class="form-control w-25" onchange="mostrarMovimientosMensuales()">
+    </div>
+
+    <!-- Tabla de Cash Flow -->
+    <div>
+        <h5>Resumen de Cash Flow Mensual</h5>
+        <table class="table table-bordered cash-flow-table">
+            <thead class="table-light">
+                <tr>
+                    <th>Fecha</th>
+                    <th>Entradas (Efectivo)</th>
+                    <th>Entradas (Tarjeta)</th>
+                    <th>Salidas (Proveedor)</th>
+                    <th>Salidas (Gastos Generales)</th>
+                    <th>Balance Diario</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tablaCashFlow">
+                <!-- Las filas de movimientos se generarán dinámicamente -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="chart-container">
+        <canvas id="chartEntradasSalidas"></canvas>
+    </div>
+    <div class="chart-container">
+        <canvas id="chartBalance"></canvas>
+    </div>
+
+    <!-- Resumen de Cash Flow -->
+    <div class="summary">
+        <h5>Resumen Final del Mes</h5>
+        <p id="resumenBalance"></p>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            mostrarMovimientosMensuales();  // Mostrar movimientos del mes actual al cargar la página
+        });
+
+        function agregarMovimiento() {
+            const fecha = document.getElementById("fecha").value;
+            const monto = parseFloat(document.getElementById("monto").value);
+            const tipo = document.getElementById("tipo").value;
+
+            if (!fecha || isNaN(monto)) {
+                alert("Por favor, completa todos los campos.");
+                return;
+            }
+
+            const movimientos = JSON.parse(localStorage.getItem("movimientos")) || [];
+            const nuevoMovimiento = {
+                id: Date.now(), // Usar el timestamp como ID único
+                fecha,
+                monto,
+                tipo
+            };
+
+            movimientos.push(nuevoMovimiento);
+            localStorage.setItem("movimientos", JSON.stringify(movimientos));
+
+            mostrarMovimientosMensuales();  // Mostrar los movimientos actualizados
+            // Limpiar los campos
+            document.getElementById("fecha").value = '';
+            document.getElementById("monto").value = '';
+            document.getElementById("tipo").value = 'entradaEfectivo';
+        }
+
+        function mostrarMovimientosMensuales() {
+            const mesSeleccionado = document.getElementById("mesSeleccionado").value;
+            const movimientos = JSON.parse(localStorage.getItem("movimientos")) || [];
+            const tabla = document.getElementById("tablaCashFlow");
+
+            tabla.innerHTML = '';  // Limpiar la tabla antes de agregar filas
+
+            const resumenDiario = {};
+
+            movimientos.forEach(({ id, fecha, monto, tipo }) => {
+                if (fecha.startsWith(mesSeleccionado)) {
+                    if (!resumenDiario[fecha]) {
+                        resumenDiario[fecha] = { entradaEfectivo: 0, entradaTarjeta: 0, salidaProveedor: 0, salidaGasto: 0, ids: [] };
+                    }
+                    resumenDiario[fecha][tipo] += monto;
+                    resumenDiario[fecha].ids.push(id); // Almacena los ID de cada movimiento
+                }
+            });
+
+            const fechas = [];
+            const entradasEfectivo = [];
+            const entradasTarjeta = [];
+            const salidasProveedor = [];
+            const salidasGasto = [];
+            const balances = [];
+            let totalEntradas = 0;
+            let totalSalidas = 0;
+            let totalBalance = 0;
+
+            Object.keys(resumenDiario).forEach(fecha => {
+                const { entradaEfectivo, entradaTarjeta, salidaProveedor, salidaGasto, ids } = resumenDiario[fecha];
+                const balanceDiario = entradaEfectivo + entradaTarjeta - salidaProveedor - salidaGasto;
+
+                fechas.push(fecha);
+                entradasEfectivo.push(entradaEfectivo);
+                entradasTarjeta.push(entradaTarjeta);
+                salidasProveedor.push(salidaProveedor);
+                salidasGasto.push(salidaGasto);
+                balances.push(balanceDiario);
+
+                totalEntradas += entradaEfectivo + entradaTarjeta;
+                totalSalidas += salidaProveedor + salidaGasto;
+                totalBalance += balanceDiario;
+
+                const fila = `
+                    <tr data-ids="${ids.join(',')}">
+                        <td>${fecha}</td>
+                        <td>$${entradaEfectivo.toFixed(2)}</td>
+                        <td>$${entradaTarjeta.toFixed(2)}</td>
+                        <td>$${salidaProveedor.toFixed(2)}</td>
+                        <td>$${salidaGasto.toFixed(2)}</td>
+                        <td>$${balanceDiario.toFixed(2)}</td>
+                        <td><button onclick="eliminarMovimiento(${ids[0]})" class="btn btn-danger btn-sm">Eliminar</button></td>
+                    </tr>
+                `;
+                tabla.insertAdjacentHTML('beforeend', fila);
+            });
+
+            generarGraficoEntradasSalidas(fechas, entradasEfectivo, entradasTarjeta, salidasProveedor, salidasGasto);
+            generarGraficoBalance(fechas, balances);
+
+            // Mostrar resumen de balance
+            const resumenBalance = document.getElementById("resumenBalance");
+            if (totalBalance >= 0) {
+                resumenBalance.innerHTML = `Balance Total: $${totalBalance.toFixed(2)} (Positivo) <br> Entradas Totales: $${totalEntradas.toFixed(2)} <br> Salidas Totales: $${totalSalidas.toFixed(2)}`;
+            } else {
+                resumenBalance.innerHTML = `Balance Total: $${totalBalance.toFixed(2)} (Negativo) <br> Entradas Totales: $${totalEntradas.toFixed(2)} <br> Salidas Totales: $${totalSalidas.toFixed(2)}`;
+            }
+        }
+
+        function eliminarMovimiento(id) {
+            let movimientos = JSON.parse(localStorage.getItem("movimientos")) || [];
+
+            // Filtrar los movimientos para eliminar el que corresponde al ID
+            movimientos = movimientos.filter(mov => mov.id !== id);
+
+            localStorage.setItem("movimientos", JSON.stringify(movimientos));
+
+            mostrarMovimientosMensuales();  // Actualizar la tabla después de eliminar
+        }
+
+        function generarGraficoEntradasSalidas(fechas, entradasEfectivo, entradasTarjeta, salidasProveedor, salidasGasto) {
+            const ctx = document.getElementById("chartEntradasSalidas").getContext("2d");
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: fechas,
+                    datasets: [
+                        {
+                            label: 'Entrada Efectivo',
+                            data: entradasEfectivo,
+                            backgroundColor: 'rgba(76, 175, 80, 0.6)',
+                        },
+                        {
+                            label: 'Entrada Tarjeta',
+                            data: entradasTarjeta,
+                            backgroundColor: 'rgba(33, 150, 243, 0.6)',
+                        },
+                        {
+                            label: 'Salida Proveedor',
+                            data: salidasProveedor,
+                            backgroundColor: 'rgba(244, 67, 54, 0.6)',
+                        },
+                        {
+                            label: 'Salida Gastos',
+                            data: salidasGasto,
+                            backgroundColor: 'rgba(255, 193, 7, 0.6)',
+                        },
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                    },
+                }
+            });
+        }
+
+        function generarGraficoBalance(fechas, balances) {
+            const ctx = document.getElementById("chartBalance").getContext("2d");
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: fechas,
+                    datasets: [{
+                        label: 'Balance Diario',
+                        data: balances,
+                        borderColor: 'rgba(0, 0, 0, 0.6)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                    },
+                }
+            });
+        }
+    </script>
+</body>
+</html>
